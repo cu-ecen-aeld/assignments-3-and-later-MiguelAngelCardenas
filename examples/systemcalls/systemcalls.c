@@ -9,15 +9,14 @@
 */
 bool do_system(const char *cmd)
 {
+    bool ret = false;
 
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
+    if(system(cmd) == 0)
+    {
+	ret = true;
+    }
 
-    return true;
+    return ret;
 }
 
 /**
@@ -45,9 +44,7 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+
 
 /*
  * TODO:
@@ -58,10 +55,24 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    bool ret = false;
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+	execv(command[0],command);
+	exit(1);
+    }
+    int status;
+    wait(&status);
+
+    if(status == 0)
+    {
+	ret = true;
+    }
 
     va_end(args);
 
-    return true;
+    return ret;
 }
 
 /**
@@ -80,10 +91,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
 
 /*
  * TODO
@@ -92,8 +99,46 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+	bool ret = false;
+	int kidpid;
 
-    va_end(args);
+	int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+	if (fd < 0) 
+	{ 
+	    perror("open"); 
+	    return ret; 
+	}
 
-    return true;
+	switch (kidpid = fork()) 
+	{
+	  case -1: 
+	    perror("fork"); 
+	    return ret; 
+	    break;
+	  case 0:
+	    if (dup2(fd, 1) < 0) 
+	    { 
+		perror("dup2"); 
+		return ret; 
+	    }
+	    close(fd);
+	    execv(command[0],command);
+	    exit(1);
+	    break;
+	  default:
+	    close(fd);
+
+	    int status;
+    	    wait(&status);
+
+    	    if(status == 0)
+    	    {
+		ret = true;
+    	    }
+
+	    va_end(args);
+
+	    return ret;
+	}
+	return ret;
 }
