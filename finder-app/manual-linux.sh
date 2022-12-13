@@ -35,9 +35,21 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     git checkout ${KERNEL_VERSION}
 
     # TODO: Add your kernel build steps here
+    echo "make mrproper"
+    make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- mrproper
+    echo "make defconfig"
+    make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- defconfig
+    echo "make all"
+    make -j4 ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- all
+    echo "make modules"
+    make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- modules
+    echo "make dtbs"
+    make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- dtbs
 fi
 
 echo "Adding the Image in outdir"
+cd "$OUTDIR"
+cp linux-stable/arch/arm64/boot/Image "$OUTDIR"
 
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
@@ -48,6 +60,11 @@ then
 fi
 
 # TODO: Create necessary base directories
+mkdir -p "${OUTDIR}/rootfs"
+cd "rootfs"
+mkdir -p "bin" "dev" "etc" "home" "lib" "proc" "sbin" "sys" "tmp" "usr" "var" "lib64"
+mkdir -p "usr/bin" "usr/lib" "usr/sbin"
+mkdir -p "var/log"
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
@@ -56,25 +73,67 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox
+    echo "make distclean for busybox"
+    make distclean
+    echo "make defconfig for busybox"
+    make defconfig
 else
     cd busybox
 fi
 
 # TODO: Make and install busybox
+echo "make install for busybox"
+make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=arm CROSS_COMPILE=aarch64-none-linux-gnu- install
 
 echo "Library dependencies"
+cd "${OUTDIR}/rootfs"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
+export SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
+# TODO: Add library dependencies to rootfs
+echo "add Library dependencies to rootfs"
+cp $SYSROOT/lib/ld-linux-aarch64.so.1 lib
+cp $SYSROOT/lib64/libm.so.6 lib64
+cp $SYSROOT/lib64/libm-2.31.so lib64
+cp $SYSROOT/lib64/libresolv.so.2 lib64
+cp $SYSROOT/lib64/libresolv-2.31.so lib64
+cp $SYSROOT/lib64/libc.so.6 lib64
+cp $SYSROOT/lib64/libc-2.31.so lib64
 
 # TODO: Make device nodes
+echo "make device nodes"
+cd "${OUTDIR}/rootfs"
+sudo mknod -m 666 dev/null c 1 3
+sudo mknod -m 666 dev/console c 5 1
 
 # TODO: Clean and build the writer utility
+echo "clean and build the writer utility"
+cd ${FINDER_APP_DIR}
+echo "clean writer and writer.o"
+make clean
+make CROSS_COMPILE=aarch64-none-linux-gnu-
 
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
+echo "copy finder related app and scripts"
+cp "finder.sh" "${OUTDIR}/rootfs/home"
+mkdir -p "${OUTDIR}/rootfs/home/conf"
+cp "conf/username.txt" "${OUTDIR}/rootfs/home/conf"
+cp "conf/assignment.txt" "${OUTDIR}/rootfs/home/conf"
+cp "finder-test.sh" "${OUTDIR}/rootfs/home"
+cp "writer" "${OUTDIR}/rootfs/home"
+cp "autorun-qemu.sh" "${OUTDIR}/rootfs/home"
 
 # TODO: Chown the root directory
+echo "chown the rootfs"
+cd "${OUTDIR}/rootfs"
+sudo chown -R root:root *
 
 # TODO: Create initramfs.cpio.gz
+echo "create cpio"
+cd "${OUTDIR}/rootfs"
+find . | cpio -H newc -ov --owner root:root > ${OUTDIR}/initramfs.cpio
+cd "${OUTDIR}"
+gzip -f initramfs.cpio

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Finder script for assignment 1
 # Author: Miguel Angel Cardenas
 
